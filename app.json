@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "BikePark",
+    "slug": "bikepark-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "bikepark",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "au.gov.sunshinecoast.bikepark"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#00A99D"
+      },
+      "package": "au.gov.sunshinecoast.bikepark"
+    },
+    "plugins": ["expo-router"]
+  }
+}
