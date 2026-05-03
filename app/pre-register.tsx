@@ -143,9 +143,6 @@ export default function PreRegisterScreen() {
           <View className="mb-4 rounded-[20px] bg-white p-5 shadow-sm">
             <Text className="mb-1 text-[20px] font-bold text-scc-charcoal">Devices</Text>
             <Text className="mb-4 text-[15px] text-scc-muted">How many are you bringing?</Text>
-            <Text className="mb-4 text-center text-5xl font-bold tabular-nums text-scc-charcoal">
-              {deviceCount ?? "—"}
-            </Text>
             <View className="flex-row flex-wrap justify-center gap-2.5">
               {[1, 2, 3, 4, 5, 6].map((n) => {
                 const selected = deviceCount === n;

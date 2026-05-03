@@ -95,17 +95,9 @@ export default function HomeScreen() {
           accentClass="bg-scc-blue"
         />
 
-        <View className="mb-3 mt-2 flex-row gap-2">
-          <Link href="/check-in" asChild>
-            <Pressable className="min-h-[54px] flex-1 flex-row items-center justify-center gap-2 rounded-[16px] bg-white px-3 py-3.5 shadow-sm active:opacity-90">
-              <Ionicons name="qr-code-outline" size={22} color={COUNCIL.teal} />
-              <Text className="text-[15px] font-semibold text-scc-charcoal" numberOfLines={1}>
-                {COPY.scanShort}
-              </Text>
-            </Pressable>
-          </Link>
+        <View className="mb-3 mt-2">
           <Link href="/pre-register" asChild>
-            <Pressable className="min-h-[54px] flex-1 flex-row items-center justify-center gap-2 rounded-[16px] bg-white px-3 py-3.5 shadow-sm active:opacity-90">
+            <Pressable className="min-h-[54px] flex-row items-center justify-center gap-2 rounded-[16px] bg-white px-3 py-3.5 shadow-sm active:opacity-90">
               <Ionicons name="create-outline" size={22} color={COUNCIL.blue} />
               <Text className="text-[15px] font-semibold text-scc-charcoal" numberOfLines={1}>
                 {COPY.preRegShort}

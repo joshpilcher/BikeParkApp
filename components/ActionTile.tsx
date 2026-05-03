@@ -33,7 +33,16 @@ export function ActionTile({
           </View>
           <View className="min-w-0 flex-1">
             <Text className="text-[20px] font-bold leading-snug text-white">{title}</Text>
-            <Text className="mt-1 text-[15px] leading-5 text-white/88">{subtitle}</Text>
+            <Text
+              className="mt-1.5 text-[16px] font-medium leading-[22px] text-white"
+              style={{
+                textShadowColor: "rgba(0,0,0,0.22)",
+                textShadowOffset: { width: 0, height: 1 },
+                textShadowRadius: 3,
+              }}
+            >
+              {subtitle}
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color="#ffffff" />
         </View>

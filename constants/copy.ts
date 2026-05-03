@@ -23,9 +23,6 @@ export const COPY = {
   dropOffSubtitle: "Register riders and park devices",
   pickUpTitle: "Pick-up",
   pickUpSubtitle: "Match tickets and hand gear back",
-  scanTitle: "Scan",
-  scanSubtitle: "Desk QR",
-  scanShort: "Scan",
   preRegTitle: "Pre-register",
   preRegSubtitle: "Before the event",
   preRegShort: "Pre-register",
@@ -42,7 +39,9 @@ export const COPY = {
   respondentPreReg: "On the list",
   searchPlaceholder: "Name or mobile",
 
-  checkInLead: "Scan a QR or enter the ID.",
   ticketLead: "Search by name or mobile.",
   registerLead: "Confirm rider, ticket, and devices.",
+  /** Selected from “On the list” at drop-off */
+  dropOffListTitle: "Check in rider",
+  dropOffListLead: "Their pre-registration loads below — adjust anything needed, then check in.",
 } as const;

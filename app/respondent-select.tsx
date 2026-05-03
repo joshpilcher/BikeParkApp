@@ -12,7 +12,8 @@ type EntryMode = "blank" | "preregistered";
 
 type Row = { id: string; name: string; mobile: string };
 
-const DEMO_ROWS: Row[] = [{ id: "1", name: "Andy", mobile: "0475578539" }];
+/** Populated from your backend when live */
+const PREREGISTERED_ROWS: Row[] = [];
 
 export default function RespondentSelectScreen() {
   const insets = useSafeAreaInsets();
@@ -22,32 +23,32 @@ export default function RespondentSelectScreen() {
 
   const [entryMode, setEntryMode] = useState<EntryMode>("preregistered");
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>("1");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return DEMO_ROWS;
-    return DEMO_ROWS.filter(
+    if (!q) return PREREGISTERED_ROWS;
+    return PREREGISTERED_ROWS.filter(
       (r) =>
         r.name.toLowerCase().includes(q) || r.mobile.replace(/\s/g, "").includes(q.replace(/\s/g, "")),
     );
   }, [query]);
 
-  const selectedPatron = selectedId ? DEMO_ROWS.find((r) => r.id === selectedId) : undefined;
+  const selectedPatron = selectedId ? PREREGISTERED_ROWS.find((r) => r.id === selectedId) : undefined;
 
-  /** Carry search selection into handover so pick-up isn’t a blank registration form */
+  /** Carry list selection into registration with patron context */
   const registerHref = useMemo(() => {
-    if (!isPickup) return "/register-devices";
     if (selectedPatron) {
       const q = new URLSearchParams({
-        flow: "pickup",
+        flow: isPickup ? "pickup" : "dropoff",
         patronId: selectedPatron.id,
         patronName: selectedPatron.name,
         patronMobile: selectedPatron.mobile,
       });
       return `/register-devices?${q.toString()}`;
     }
-    return "/register-devices?flow=pickup";
+    if (isPickup) return "/register-devices?flow=pickup";
+    return "/register-devices";
   }, [isPickup, selectedPatron]);
 
   /** Pick-up and “on the list” drop-off require a selected rider */
@@ -88,7 +89,7 @@ export default function RespondentSelectScreen() {
             <Pressable
               onPress={() => {
                 setEntryMode("preregistered");
-                setSelectedId("1");
+                setSelectedId(null);
               }}
               className={`flex-1 rounded-[12px] py-3 ${entryMode === "preregistered" ? "bg-white shadow-sm" : ""}`}
             >
@@ -142,7 +143,13 @@ export default function RespondentSelectScreen() {
                 keyExtractor={(item) => item.id}
                 ListEmptyComponent={
                   <Text className="p-8 text-center text-[15px] leading-6 text-scc-muted">
-                    {isPickup ? "No match — try another number." : "No match — try walk-up."}
+                    {query.trim()
+                      ? isPickup
+                        ? "No match — try another number."
+                        : "No match — try walk-up."
+                      : isPickup
+                        ? "No riders on file for this session yet."
+                        : "No pre-registrations for this session yet."}
                   </Text>
                 }
                 renderItem={({ item }) => {

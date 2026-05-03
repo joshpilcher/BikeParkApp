@@ -53,7 +53,8 @@ export default function RegisterDevicesScreen() {
     }
   }, [patronMobileParam]);
 
-  const handoverFromSearch = isPickup && Boolean(patronName.trim());
+  const dropoffFromList = flow === "dropoff" && Boolean(patronName.trim());
+  const handoverPickupFromSearch = isPickup && Boolean(patronName.trim());
 
   const parked = useMemo(
     () => getParkedForPatron(patronIdRaw, patronName),
@@ -85,13 +86,20 @@ export default function RegisterDevicesScreen() {
     parked.devices.length > 0 && parked.devices.every((d) => released[d.id]);
 
   useEffect(() => {
-    if (!handoverFromSearch) return;
+    if (!handoverPickupFromSearch) return;
     setReleased({});
-  }, [handoverFromSearch, patronIdRaw, patronName]);
+  }, [handoverPickupFromSearch, patronIdRaw, patronName]);
 
   const [ticket, setTicket] = useState("");
-  const [name, setName] = useState("");
-  const [mobile, setMobile] = useState("");
+  const [name, setName] = useState(dropoffFromList ? patronName : "");
+  const [mobile, setMobile] = useState(dropoffFromList ? patronMobile : "");
+  /** List selection changed mid-flow — refill rider fields */
+  useEffect(() => {
+    if (!dropoffFromList) return;
+    setName(patronName);
+    setMobile(patronMobile);
+  }, [dropoffFromList, patronIdRaw, patronName, patronMobile]);
+
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [totalDevices, setTotalDevices] = useState(1);
@@ -145,14 +153,16 @@ export default function RegisterDevicesScreen() {
               </Pressable>
             </Link>
             <View
-              className={`rounded-full px-3 py-1.5 ${isPickup ? "bg-scc-teal/15" : "bg-scc-blue/10"}`}
+              className={`rounded-full px-3 py-1.5 ${
+                isPickup || dropoffFromList ? "bg-scc-teal/15" : "bg-scc-blue/10"
+              }`}
             >
               <Text
                 className={`text-[11px] font-bold uppercase tracking-wide ${
-                  isPickup ? "text-scc-teal" : "text-scc-blue"
+                  isPickup || dropoffFromList ? "text-scc-teal" : "text-scc-blue"
                 }`}
               >
-                {isPickup ? "Pick-up" : "Walk-up"}
+                {isPickup ? "Pick-up" : dropoffFromList ? "On the list" : "Walk-up"}
               </Text>
             </View>
             <View className="w-11" />
@@ -160,18 +170,26 @@ export default function RegisterDevicesScreen() {
 
           <View className="mb-5">
             <Text className="text-[26px] font-bold text-scc-charcoal">
-              {handoverFromSearch ? "Release devices" : isPickup ? "Pick-up" : "Registration"}
+              {handoverPickupFromSearch
+                ? "Release devices"
+                : dropoffFromList
+                  ? COPY.dropOffListTitle
+                  : isPickup
+                    ? "Pick-up"
+                    : "Registration"}
             </Text>
             <Text className="mt-2 text-[16px] leading-6 text-scc-muted">
-              {handoverFromSearch
+              {handoverPickupFromSearch
                 ? "Review their ticket and release each item when you hand it over."
-                : isPickup
-                  ? "Search for a rider first — their ticket and parked gear load automatically."
-                  : COPY.registerLead}
+                : dropoffFromList
+                  ? COPY.dropOffListLead
+                  : isPickup
+                    ? "Search for a rider first — their ticket and parked gear load automatically."
+                    : COPY.registerLead}
             </Text>
           </View>
 
-          {handoverFromSearch ? (
+          {handoverPickupFromSearch ? (
             <>
               <View className="mb-4 overflow-hidden rounded-[20px] border border-scc-teal/20 bg-white p-5 shadow-sm">
                 <Text className="text-[11px] font-semibold uppercase tracking-wide text-scc-muted">
@@ -309,13 +327,19 @@ export default function RegisterDevicesScreen() {
           ) : (
             <>
               <View className="mb-4 rounded-[20px] bg-white p-5 shadow-sm">
-                <Text className="mb-4 text-[17px] font-bold text-scc-charcoal">Rider</Text>
+                {dropoffFromList ? (
+                  <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-scc-muted">
+                    Pre-registered rider · edit if anything changed
+                  </Text>
+                ) : (
+                  <Text className="mb-4 text-[17px] font-bold text-scc-charcoal">Rider</Text>
+                )}
                 <AppInput
                   label="Ticket #"
                   optional
                   value={ticket}
                   onChangeText={setTicket}
-                  placeholder="Scan or type if you have it"
+                  placeholder="Type ID if you have it"
                 />
                 <AppInput label="Name" value={name} onChangeText={setName} placeholder="Rider name" />
                 <AppInput
@@ -333,14 +357,18 @@ export default function RegisterDevicesScreen() {
                   placeholder="name@email.com"
                   keyboardType="email-address"
                 />
+                {dropoffFromList ? (
+                  <Link href="/respondent-select" asChild>
+                    <Pressable className="mt-5 self-start active:opacity-70">
+                      <Text className="text-[15px] font-semibold text-scc-blue">Wrong rider?</Text>
+                    </Pressable>
+                  </Link>
+                ) : null}
               </View>
 
               <View className="mb-4 rounded-[20px] bg-white p-5 shadow-sm">
                 <Text className="mb-1 text-[17px] font-bold text-scc-charcoal">Devices</Text>
                 <Text className="mb-4 text-[15px] text-scc-muted">Count and details</Text>
-                <Text className="mb-4 text-center text-5xl font-bold tabular-nums text-scc-charcoal">
-                  {totalDevices}
-                </Text>
                 <View className="flex-row flex-wrap justify-center gap-2.5">
                   {COUNTS.map((n) => {
                     const selected = totalDevices === n;
@@ -412,11 +440,15 @@ export default function RegisterDevicesScreen() {
             </>
           )}
 
-          {!handoverFromSearch ? (
+          {!handoverPickupFromSearch ? (
             <Link href={isPickup ? "/respondent-select?mode=pickup" : "/respondent-select"} asChild>
               <Pressable className="mb-6 py-2 active:opacity-70">
                 <Text className="text-center text-[15px] font-semibold text-scc-teal">
-                  {isPickup ? "Back to search" : "Change visitor type"}
+                  {isPickup
+                    ? "Back to search"
+                    : dropoffFromList
+                      ? "Back to rider search"
+                      : "Change visitor type"}
                 </Text>
               </Pressable>
             </Link>
@@ -436,9 +468,17 @@ export default function RegisterDevicesScreen() {
           }}
         >
           <Link href="/" asChild>
-            <Pressable className="flex-row items-center justify-center gap-2 rounded-[16px] bg-scc-blue py-4 active:opacity-95">
+            <Pressable
+              className={`flex-row items-center justify-center gap-2 rounded-[16px] py-4 active:opacity-95 ${
+                dropoffFromList ? "bg-scc-teal" : "bg-scc-blue"
+              }`}
+            >
               <Text className="text-center text-[17px] font-bold text-white">
-                {handoverFromSearch || isPickup ? "Done" : "Save"}
+                {handoverPickupFromSearch || isPickup
+                  ? "Done"
+                  : dropoffFromList
+                    ? "Check in"
+                    : "Save"}
               </Text>
               <Ionicons name="checkmark" size={22} color="#fff" />
             </Pressable>
