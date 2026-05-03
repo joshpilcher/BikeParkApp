@@ -1,15 +1,18 @@
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link } from "expo-router";
-import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { useCallback, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ActionTile } from "../components/ActionTile";
 import { CouncilDashboardHeader } from "../components/CouncilDashboardHeader";
 import { COPY } from "../constants/copy";
 import { COUNCIL } from "../constants/councilTheme";
+import { useActiveEvent } from "../contexts/ActiveEventContext";
 import { DEVICE_CATEGORIES } from "../constants/devices";
+import { fetchDeviceCategoryBreakdown, fetchEventSessionStats } from "../lib/eventStats";
 
 const initialCounts = Object.fromEntries(DEVICE_CATEGORIES.map((d) => [d.key, 0])) as Record<
   string,
@@ -18,15 +21,40 @@ const initialCounts = Object.fromEntries(DEVICE_CATEGORIES.map((d) => [d.key, 0]
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const [counts] = useState(initialCounts);
-  const [droppedOff, setDroppedOff] = useState(0);
-  const [remaining, setRemaining] = useState(0);
+  const { liveEventName, liveEventId } = useActiveEvent();
+  const [counts, setCounts] = useState(initialCounts);
+  const [stillParked, setStillParked] = useState(0);
+  const [checkedInTotal, setCheckedInTotal] = useState(0);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  function refreshDemo() {
-    setDroppedOff(0);
-    setRemaining(0);
-  }
+  const loadSessionStats = useCallback(async () => {
+    if (!liveEventId) {
+      setStillParked(0);
+      setCheckedInTotal(0);
+      setCounts(initialCounts);
+      return;
+    }
+
+    setStatsLoading(true);
+    try {
+      const [session, breakdown] = await Promise.all([
+        fetchEventSessionStats(liveEventId),
+        fetchDeviceCategoryBreakdown(liveEventId),
+      ]);
+      setStillParked(session.stillParked);
+      setCheckedInTotal(session.checkedInTotal);
+      setCounts(breakdown);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [liveEventId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadSessionStats();
+    }, [loadSessionStats]),
+  );
 
   return (
     <View className="flex-1 bg-scc-wash" style={{ paddingTop: insets.top }}>
@@ -43,7 +71,7 @@ export default function HomeScreen() {
           </View>
           <View className="min-w-0 flex-1">
             <Text className="text-[15px] font-semibold text-scc-charcoal" numberOfLines={1}>
-              {COPY.eventPlaceholder}
+              {liveEventName ?? COPY.eventPlaceholder}
             </Text>
             <Text className="text-[13px] text-scc-muted" numberOfLines={1}>
               {COPY.sessionCardHint}
@@ -54,25 +82,37 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        <Link href="/create-event" asChild>
+          <Pressable className="mb-4 min-h-[52px] flex-row items-center justify-center gap-2 rounded-[16px] border border-scc-teal/35 bg-white px-4 py-3.5 shadow-sm active:opacity-95">
+            <Ionicons name="add-circle-outline" size={22} color={COUNCIL.teal} />
+            <Text className="text-[15px] font-semibold text-scc-charcoal">{COPY.createEventCta}</Text>
+          </Pressable>
+        </Link>
+
         <View className="mb-4 overflow-hidden rounded-[20px] bg-white shadow-sm shadow-slate-900/6">
           <View className="flex-row items-stretch">
             <View className="flex-1 border-r border-slate-100 px-4 py-4">
               <View className="mb-1 flex-row items-center justify-between">
                 <Text className="text-[13px] font-medium text-scc-muted">{COPY.onSiteLabel}</Text>
                 <Pressable
-                  onPress={refreshDemo}
+                  onPress={() => void loadSessionStats()}
                   hitSlop={10}
-                  accessibilityLabel="Reset session counts"
+                  accessibilityLabel="Refresh session stats"
                   className="rounded-full p-1.5 active:bg-slate-100"
+                  disabled={statsLoading}
                 >
-                  <Ionicons name="refresh" size={16} color={COUNCIL.muted} />
+                  {statsLoading ? (
+                    <ActivityIndicator size="small" color={COUNCIL.muted} />
+                  ) : (
+                    <Ionicons name="refresh" size={16} color={COUNCIL.muted} />
+                  )}
                 </Pressable>
               </View>
-              <Text className="text-4xl font-bold tabular-nums text-rose-600">{remaining}</Text>
+              <Text className="text-4xl font-bold tabular-nums text-rose-600">{stillParked}</Text>
             </View>
             <View className="flex-1 px-4 py-4">
               <Text className="mb-1 text-[13px] font-medium text-scc-muted">{COPY.checkedInLabel}</Text>
-              <Text className="text-4xl font-bold tabular-nums text-scc-blue">{droppedOff}</Text>
+              <Text className="text-4xl font-bold tabular-nums text-scc-blue">{checkedInTotal}</Text>
             </View>
           </View>
         </View>
@@ -115,7 +155,7 @@ export default function HomeScreen() {
             <View className="min-w-0 flex-1">
               <Text className="text-[15px] font-semibold text-scc-charcoal">Session details</Text>
               <Text className="text-[13px] text-scc-muted">
-                {detailsOpen ? "Hide" : "Device mix and demo controls"}
+                {detailsOpen ? "Hide" : "Gear still on site by type"}
               </Text>
             </View>
           </View>
@@ -146,22 +186,10 @@ export default function HomeScreen() {
             </View>
 
             <View className="mt-3 rounded-[20px] border border-dashed border-scc-teal/25 bg-white px-4 py-4">
-              <Text className="mb-3 text-[13px] leading-5 text-scc-muted">{COPY.demoHint}</Text>
-              <View className="flex-row flex-wrap gap-2">
-                <Pressable
-                  className="rounded-[14px] bg-scc-teal/12 px-4 py-3 active:bg-scc-teal/20"
-                  onPress={() => setDroppedOff((n) => Math.min(99, n + 1))}
-                >
-                  <Text className="text-[13px] font-semibold text-scc-blue">+1 checked in</Text>
-                </Pressable>
-                <Pressable
-                  className="rounded-[14px] bg-rose-50 px-4 py-3 active:bg-rose-100"
-                  onPress={() => setRemaining((r) => Math.min(99, r + 1))}
-                >
-                  <Text className="text-[13px] font-semibold text-rose-800">+1 still parked</Text>
-                </Pressable>
-              </View>
-              <Text className="mt-3 text-[11px] text-scc-muted">{COPY.demoBadge}</Text>
+              <Text className="text-[13px] leading-5 text-scc-muted">
+                This breakdown only includes devices still checked in or parked (not released). Active visits
+                only — same scope as Still parked. Set devices.category_key when saving gear.
+              </Text>
             </View>
           </View>
         ) : null}

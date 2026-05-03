@@ -1,6 +1,7 @@
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Link } from "expo-router";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -11,6 +12,14 @@ import { COUNCIL } from "../constants/councilTheme";
 export default function CheckTicketScreen() {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        setQuery("");
+      };
+    }, []),
+  );
 
   return (
     <View className="flex-1 bg-scc-wash" style={{ paddingTop: insets.top }}>

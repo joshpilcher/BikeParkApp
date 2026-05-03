@@ -1,39 +1,62 @@
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Link, router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppInput } from "../components/AppInput";
+import { DeviceTypeSelect } from "../components/DeviceTypeSelect";
 import { MintBackground } from "../components/MintBackground";
-
-type DeviceRow = { kind: string; notes: string };
+import { useActiveEvent } from "../contexts/ActiveEventContext";
+import {
+  deviceKindLabelFromRow,
+  type DeviceFormRow,
+} from "../constants/devices";
+import { normalizeAuMobile } from "../lib/phone";
+import { supabase } from "../lib/supabase";
 
 export default function PreRegisterScreen() {
   const insets = useSafeAreaInsets();
+  const { liveEventId } = useActiveEvent();
+  const [saveBusy, setSaveBusy] = useState(false);
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [email, setEmail] = useState("");
   const [deviceCount, setDeviceCount] = useState<number | null>(null);
-  const [deviceRows, setDeviceRows] = useState<DeviceRow[]>([]);
+  const [deviceRows, setDeviceRows] = useState<DeviceFormRow[]>([]);
   const [termsOk, setTermsOk] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        setName("");
+        setMobile("");
+        setEmail("");
+        setDeviceCount(null);
+        setDeviceRows([]);
+        setTermsOk(false);
+        setSaveBusy(false);
+      };
+    }, []),
+  );
 
   const handleDeviceCountSelect = useCallback((n: number) => {
     setDeviceCount(n);
     setDeviceRows((prev) => {
       const kept = prev.slice(0, n);
       while (kept.length < n) {
-        kept.push({ kind: "", notes: "" });
+        kept.push({ categoryKey: "", notes: "", otherDescription: "" });
       }
       return kept;
     });
   }, []);
 
-  const updateDeviceRow = useCallback((index: number, patch: Partial<DeviceRow>) => {
+  const updateDeviceRow = useCallback((index: number, patch: Partial<DeviceFormRow>) => {
     setDeviceRows((prev) => {
       const next = [...prev];
       while (next.length <= index) {
-        next.push({ kind: "", notes: "" });
+        next.push({ categoryKey: "", notes: "", otherDescription: "" });
       }
       next[index] = { ...next[index], ...patch };
       return next;
@@ -48,14 +71,130 @@ export default function PreRegisterScreen() {
     return p;
   }, [name, mobile, deviceCount, termsOk]);
 
-  function submit() {
-    router.push("/pre-register-success");
+  async function submit() {
+    if (!liveEventId) {
+      Alert.alert(
+        "No live event",
+        "Ask staff to set an event to Live on the dashboard before pre-registration.",
+      );
+      return;
+    }
+
+    const normMobile = normalizeAuMobile(mobile);
+    if (!normMobile) {
+      Alert.alert("Mobile required", "Enter a valid Australian mobile number.");
+      return;
+    }
+
+    if (deviceCount === null || deviceCount < 1) return;
+
+    const deviceSlice = deviceRows.slice(0, deviceCount);
+    for (let i = 0; i < deviceSlice.length; i++) {
+      const row = deviceSlice[i];
+      if (!row?.categoryKey?.trim()) {
+        Alert.alert("Device type", `Choose a category for device ${i + 1}.`);
+        return;
+      }
+      if (row.categoryKey === "other" && !row.otherDescription.trim()) {
+        Alert.alert("Describe device", `Add a short description for device ${i + 1} (Other).`);
+        return;
+      }
+    }
+
+    setSaveBusy(true);
+    try {
+      const { data: patron, error: patronErr } = await supabase
+        .from("patrons")
+        .upsert(
+          {
+            full_name: name.trim(),
+            mobile_e164: normMobile,
+            email: email.trim() ? email.trim() : null,
+          },
+          { onConflict: "mobile_e164" },
+        )
+        .select("id")
+        .single();
+
+      if (patronErr || !patron) {
+        Alert.alert("Could not save rider", patronErr?.message ?? "Unknown error");
+        return;
+      }
+
+      const now = new Date().toISOString();
+
+      const { data: preReg, error: preErr } = await supabase
+        .from("pre_registrations")
+        .upsert(
+          {
+            event_id: liveEventId,
+            patron_id: patron.id,
+            expected_device_count: deviceCount,
+            terms_accepted_at: now,
+            submitted_at: now,
+          },
+          { onConflict: "event_id,patron_id" },
+        )
+        .select("id")
+        .single();
+
+      if (preErr || !preReg) {
+        Alert.alert("Could not save registration", preErr?.message ?? "Unknown error");
+        return;
+      }
+
+      await supabase.from("pre_registration_devices").delete().eq("pre_registration_id", preReg.id);
+
+      const devicePayload = deviceRows.slice(0, deviceCount).map((row, index) => ({
+        pre_registration_id: preReg.id,
+        sort_order: index,
+        kind_label: deviceKindLabelFromRow(row),
+        detail_notes: row.notes,
+      }));
+
+      if (devicePayload.length) {
+        const { error: devErr } = await supabase.from("pre_registration_devices").insert(devicePayload);
+        if (devErr) {
+          Alert.alert("Could not save devices", devErr.message);
+          return;
+        }
+      }
+
+      const { error: attErr } = await supabase.from("event_attendees").upsert(
+        {
+          event_id: liveEventId,
+          patron_id: patron.id,
+          source: "pre_register",
+        },
+        { onConflict: "event_id,patron_id" },
+      );
+
+      if (attErr) {
+        Alert.alert("Could not add to guest list", attErr.message);
+        return;
+      }
+
+      router.push("/pre-register-success");
+    } finally {
+      setSaveBusy(false);
+    }
   }
 
+  const devicesHaveTypes =
+    deviceCount !== null &&
+    deviceCount > 0 &&
+    deviceRows.slice(0, deviceCount).every((r) => {
+      if (!r.categoryKey.trim()) return false;
+      if (r.categoryKey === "other" && !r.otherDescription.trim()) return false;
+      return true;
+    });
+
   const canSubmit =
+    !saveBusy &&
     name.trim().length > 0 &&
     mobile.trim().length > 0 &&
     deviceCount !== null &&
+    devicesHaveTypes &&
     termsOk;
 
   return (
@@ -171,20 +310,40 @@ export default function PreRegisterScreen() {
                   Add a quick description so staff can spot your gear.
                 </Text>
                 {Array.from({ length: deviceCount }).map((_, index) => {
-                  const row = deviceRows[index] ?? { kind: "", notes: "" };
+                  const row = deviceRows[index] ?? {
+                    categoryKey: "",
+                    notes: "",
+                    otherDescription: "",
+                  };
                   return (
                     <View key={index} className="mb-5 rounded-[16px] bg-slate-50 p-4 last:mb-0">
                       <Text className="mb-3 text-[15px] font-semibold text-scc-charcoal">
                         Device {index + 1}
                       </Text>
                       <Text className="mb-2 text-[13px] font-medium text-scc-muted">Type</Text>
-                      <TextInput
-                        value={row.kind}
-                        onChangeText={(t) => updateDeviceRow(index, { kind: t })}
-                        placeholder="e.g. Mountain bike"
-                        placeholderTextColor="#94a3b8"
-                        className="mb-3 rounded-[14px] bg-white px-3 py-3.5 text-[16px] text-scc-charcoal"
+                      <DeviceTypeSelect
+                        value={row.categoryKey}
+                        onChange={(categoryKey) =>
+                          updateDeviceRow(index, {
+                            categoryKey,
+                            ...(categoryKey !== "other" ? { otherDescription: "" } : {}),
+                          })
+                        }
                       />
+                      {row.categoryKey === "other" ? (
+                        <>
+                          <Text className="mb-2 mt-3 text-[13px] font-medium text-scc-muted">
+                            Describe it
+                          </Text>
+                          <TextInput
+                            value={row.otherDescription}
+                            onChangeText={(t) => updateDeviceRow(index, { otherDescription: t })}
+                            placeholder="e.g. Unicycle, cargo trike…"
+                            placeholderTextColor="#94a3b8"
+                            className="rounded-[14px] bg-white px-3 py-3.5 text-[16px] text-scc-charcoal"
+                          />
+                        </>
+                      ) : null}
                       <Text className="mb-2 text-[13px] font-medium text-scc-muted">Notes</Text>
                       <TextInput
                         value={row.notes}
@@ -246,19 +405,25 @@ export default function PreRegisterScreen() {
         >
           <Pressable
             disabled={!canSubmit}
-            onPress={submit}
+            onPress={() => void submit()}
             className={`flex-row items-center justify-center gap-2 rounded-[16px] py-4 ${
               canSubmit ? "bg-scc-blue active:opacity-95" : "bg-slate-200"
             }`}
           >
-            <Text
-              className={`text-center text-[17px] font-bold ${
-                canSubmit ? "text-white" : "text-slate-400"
-              }`}
-            >
-              Submit
-            </Text>
-            {canSubmit ? <Ionicons name="arrow-forward" size={22} color="#fff" /> : null}
+            {saveBusy ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Text
+                  className={`text-center text-[17px] font-bold ${
+                    canSubmit ? "text-white" : "text-slate-400"
+                  }`}
+                >
+                  Submit
+                </Text>
+                {canSubmit ? <Ionicons name="arrow-forward" size={22} color="#fff" /> : null}
+              </>
+            )}
           </Pressable>
         </View>
       </View>

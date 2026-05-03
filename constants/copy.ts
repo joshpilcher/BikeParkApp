@@ -8,6 +8,10 @@ export const COPY = {
 
   activeEvent: "Current session",
   eventPlaceholder: "Community event",
+  createEventCta: "Create event",
+  createEventTitle: "New event",
+  createEventLead: "Add a council event to run parking for.",
+  createEventSuccessTitle: "Event created",
   statsTitle: "Session",
   statsHint: "Updates when devices are checked in or returned.",
   glanceTitle: "Right now",
@@ -43,5 +47,7 @@ export const COPY = {
   registerLead: "Confirm rider, ticket, and devices.",
   /** Selected from “On the list” at drop-off */
   dropOffListTitle: "Check in rider",
-  dropOffListLead: "Their pre-registration loads below — adjust anything needed, then check in.",
+  dropOffListLead: "Review their pre-registration, assign a lanyard, then check in. Tap Edit if details changed.",
+  dropOffEditDetails: "Edit rider & devices",
+  dropOffDoneEditing: "Done editing",
 } as const;
